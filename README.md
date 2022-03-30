@@ -1,2 +1,2 @@
-# remote-play
-A UDP Remote Play server and client to send inputs across the Internet.
+# C# Remote Play for Windows
+A development on WANinput to become a full UDP-based Remote Play client and server. Implemented in C#.
