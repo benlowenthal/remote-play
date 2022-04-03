@@ -1,8 +1,9 @@
-﻿using System;
+using System;
 using System.Net;
 using System.Net.Sockets;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Threading;
 using OpenTK;
 using OpenTK.Graphics.OpenGL4;
 using OpenTK.Windowing.Common;
@@ -13,7 +14,7 @@ namespace waninput2
 {
     class Client
     {
-        static void Main(string[] args)
+        public static void Main(string[] args)
         {
             using ClientWindow c = new ClientWindow(1280, 720, "Remote Play Client", 60f, new IPEndPoint(IPAddress.Parse(args[0]), int.Parse(args[1])));
             c.Run();
@@ -22,8 +23,6 @@ namespace waninput2
 
     class ClientWindow : GameWindow
     {
-        private int width, height;
-
         private int texture;
 
         private readonly float[] vertices = {
@@ -44,6 +43,10 @@ namespace waninput2
 
         private Shader shader;
 
+        private UdpClient udp;
+        private IPEndPoint endp;
+        private Bitmap frame;
+
         public ClientWindow(int w, int h, string title, float freq, IPEndPoint ep) : base(
             new GameWindowSettings() {
                 RenderFrequency = freq,
@@ -55,19 +58,25 @@ namespace waninput2
                 Title = "Remote Play Client - " + ep.ToString()
             })
         {
-            width = w; height = h;
-
             //setup sockets
-            IPAddress ip = Dns.GetHostAddresses(Dns.GetHostName())[0];
+            udp = new UdpClient();
+            endp = ep;
 
-            UdpClient udp = new UdpClient(ep.Port);
-
-            byte[] dgram = Protocol.Datagram(Protocol.HANDSHAKE, 1);
+            byte[] dgram = Protocol.Datagram(Protocol.CONNECT, Array.Empty<byte>());
             udp.Send(dgram, dgram.Length, ep);
+            System.Diagnostics.Debug.WriteLine("Sent {0} to {1}", Protocol.CONNECT.ToString(), ep.ToString());
+
+            frame = new Bitmap(w, h);
+
+            Thread t = new Thread(new ThreadStart(FrameListen));
+            t.Start();
         }
 
         private void DrawImage(Bitmap image)
         {
+            int width = Size.X;
+            int height = Size.Y;
+
             image = Protocol.Rescale(image, width, height);
 
             BitmapData bmp = image.LockBits(new Rectangle(0, 0, image.Width, image.Height), ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
@@ -122,6 +131,12 @@ namespace waninput2
             GL.DeleteBuffer(elementBuffer);
 
             shader.Dispose();
+            frame.Dispose();
+
+            byte[] dg = Protocol.Datagram(Protocol.DISCONNECT, Array.Empty<byte>());
+            udp.Send(dg, dg.Length);
+            System.Diagnostics.Debug.WriteLine("Sent disconnect token");
+            udp.Close();
 
             base.OnUnload();
         }
@@ -134,7 +149,7 @@ namespace waninput2
             GL.BindVertexArray(vao);
             GL.DrawElements(PrimitiveType.Triangles, indices.Length, DrawElementsType.UnsignedInt, 0);
 
-            DrawImage(Protocol.Decode(Protocol.Encode(Server.Capture())));
+            DrawImage(frame);
 
             //openGL required
             Context.SwapBuffers();
@@ -143,7 +158,7 @@ namespace waninput2
 
         protected override void OnUpdateFrame(FrameEventArgs e)
         {
-            if (KeyboardState.IsKeyDown(Keys.Escape)) Close();
+            if (KeyboardState.IsKeyDown(Keys.Escape)) Dispose();
 
             base.OnUpdateFrame(e);
         }
@@ -161,6 +176,27 @@ namespace waninput2
                 GL.Viewport(0, (e.Height - viewHeight) / 2, e.Width, viewHeight);
             }
             base.OnResize(e);
+        }
+
+        private void FrameListen()
+        {
+            //listens for frames sent from server
+            udp.Connect(endp);
+            System.Diagnostics.Debug.WriteLine("Bound to " + endp.ToString());
+            while (true)
+            {
+                try
+                {
+                    byte[] dgram = udp.Receive(ref endp);
+                    System.Diagnostics.Debug.WriteLine("Received " + dgram.Length.ToString() + " bytes from " + endp.ToString());
+                    frame = Protocol.Decode(dgram[1..]);
+                }
+                catch (Exception)
+                {
+                    System.Diagnostics.Debug.WriteLine("Receive failed at " + DateTime.Now.ToString() + ", closing thread...");
+                   // break;
+                }
+            }
         }
     }
 }
