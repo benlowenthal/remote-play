@@ -11,13 +11,13 @@ namespace waninput2
     class Protocol
     {
         public static byte CONNECT = 1;
-        public static byte DISCONNECT = 1;
-        public static byte FRAME = 2;
-        public static byte CONTROL = 3;
+        public static byte DISCONNECT = 2;
+        public static byte FRAME = 3;
+        public static byte CONTROL = 4;
 
-        public static byte BUTTON = 4;
-        public static byte AXIS = 5;
-        public static byte HAT = 6;
+        public static byte BUTTON = 11;
+        public static byte AXIS = 12;
+        public static byte HAT = 13;
 
         public static byte[] Datagram(byte command, byte[] data)
         {
