@@ -1,10 +1,9 @@
-using System;
+﻿using System;
 using System.Net;
 using System.Net.Sockets;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Threading;
-using OpenTK;
 using OpenTK.Graphics.OpenGL4;
 using OpenTK.Windowing.Common;
 using OpenTK.Windowing.Desktop;
@@ -47,6 +46,8 @@ namespace waninput2
         private IPEndPoint endp;
         private Bitmap frame;
 
+        private bool unloaded = false;
+
         public ClientWindow(int w, int h, string title, float freq, IPEndPoint ep) : base(
             new GameWindowSettings() {
                 RenderFrequency = freq,
@@ -68,8 +69,13 @@ namespace waninput2
 
             frame = new Bitmap(w, h);
 
-            Thread t = new Thread(new ThreadStart(FrameListen));
-            t.Start();
+            Thread frameListen = new Thread(new ThreadStart(FrameListen));
+            frameListen.Start();
+
+            Thread controls = new Thread(new ThreadStart(SendControls));
+            controls.Start();
+
+            Unload += delegate () { unloaded = true; };
         }
 
         private void DrawImage(Bitmap image)
@@ -91,6 +97,7 @@ namespace waninput2
         protected override void OnLoad()
         {
             shader = new Shader();
+            GLFW.Init();
 
             //setup vertex array object
             vao = GL.GenVertexArray();
@@ -183,7 +190,8 @@ namespace waninput2
             //listens for frames sent from server
             udp.Connect(endp);
             System.Diagnostics.Debug.WriteLine("Bound to " + endp.ToString());
-            while (true)
+
+            while (!unloaded)
             {
                 try
                 {
@@ -193,10 +201,40 @@ namespace waninput2
                 }
                 catch (Exception)
                 {
-                    System.Diagnostics.Debug.WriteLine("Receive failed at " + DateTime.Now.ToString() + ", closing thread...");
-                   // break;
+                    System.Diagnostics.Debug.WriteLine("Receive failed at " + DateTime.Now.ToString());
                 }
             }
+        }
+
+        private void SendControls()
+        {
+            //controller setup
+            int jid = -1;
+            for (int x = 0; x < 4; x++)
+                if (GLFW.JoystickIsGamepad(x))
+                    jid = x;
+
+            if (jid == -1)
+            {
+                System.Diagnostics.Debug.WriteLine("No controller found");
+                return;
+            }
+
+            while (!unloaded)
+            {
+                GLFW.PollEvents();
+
+                Span<float> axes = GLFW.GetJoystickAxes(jid);
+                JoystickHats hats = GLFW.GetJoystickHats(jid)[0];
+                JoystickInputAction[] buts = GLFW.GetJoystickButtons(jid);
+
+                //byte[] dgram = Protocol.Datagram()
+                System.Diagnostics.Debug.WriteLine(string.Join(" ", axes.ToArray()));
+
+                Thread.CurrentThread.Join(1000 / 30);
+            }
+
+            GLFW.Terminate();
         }
     }
 }
