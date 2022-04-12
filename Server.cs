@@ -13,8 +13,8 @@ namespace waninput2
 {
     class Server
     {
-        private static int capWidth = 768;
-        private static int capHeight = 432;
+        private static int capWidth = 1280;
+        private static int capHeight = 720;
 
         private static UdpClient udp;
         private static Dictionary<IPEndPoint, VJoy> connections = new Dictionary<IPEndPoint, VJoy>(4);
@@ -38,7 +38,6 @@ namespace waninput2
             Thread cl = new Thread(new ThreadStart(StartLocalClient));
             cl.Start();
 
-            //bool[] availableVJs = new bool[] { true, true, true, true };
             while (true)
             {
                 IPEndPoint ep = new IPEndPoint(IPAddress.Any, port);
@@ -47,9 +46,6 @@ namespace waninput2
 
                 if (dgram[0] == Protocol.CONNECT)
                 {
-                    //uint vjIdx = (uint) Array.IndexOf(availableVJs, true);
-                    //availableVJs[vjIdx] = false;
-
                     VJoy vj = new VJoy();
                     System.Diagnostics.Debug.WriteLine("Acquired vJoy device for " + ep.Address.ToString());
 
@@ -57,8 +53,6 @@ namespace waninput2
                 }
                 else if (dgram[0] == Protocol.DISCONNECT)
                 {
-                    //uint idx = connections[ep].JoystickId;
-                    //availableVJs[idx] = false;
                     System.Diagnostics.Debug.WriteLine(ep.ToString() + " disconnected");
                     break;
                 }
@@ -99,13 +93,27 @@ namespace waninput2
         {
             while (true)
             {
-                byte[] dgram = Protocol.Datagram(Protocol.FRAME, Protocol.Encode(Capture()));
+                byte[] frame = Protocol.Encode(Capture());
 
-                foreach ((IPEndPoint endpoint, _) in connections) if (endpoint != null)
-                    {
-                        System.Diagnostics.Debug.WriteLine("Sending " + dgram.Length.ToString() + " bytes to " + endpoint.ToString());
-                        //udp.Send(dgram, dgram.Length, endpoint);
-                    }
+                if (frame.Length < 60000)
+                {
+                    foreach ((IPEndPoint endpoint, _) in connections) if (endpoint != null)
+                        {
+                            byte[] dgram = Protocol.Datagram(Protocol.FRAME, Protocol.COMPLETE, frame);
+                            System.Diagnostics.Debug.WriteLine("Sending " + dgram.Length.ToString() + " bytes to " + endpoint.ToString());
+                            udp.Send(dgram, dgram.Length, endpoint);
+                        }
+                }
+                else
+                {
+                    for (int i = 0; i < frame.Length; i += 60000)
+                        foreach ((IPEndPoint endpoint, _) in connections) if (endpoint != null)
+                            {
+                                byte[] dgram = Protocol.Datagram(Protocol.FRAME, (byte)(i/60000), (byte)(frame.Length/60000 + 1), frame[i..Math.Min(i + 60000, frame.Length)]);
+                                System.Diagnostics.Debug.WriteLine("Sending " + dgram.Length.ToString() + " bytes to " + endpoint.ToString());
+                                udp.Send(dgram, dgram.Length, endpoint);
+                            }
+                }
 
                 Thread.CurrentThread.Join(1000 / 30); //hertz
             }

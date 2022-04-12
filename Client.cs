@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Threading;
+using System.Collections.Generic;
 using OpenTK.Graphics.OpenGL4;
 using OpenTK.Windowing.Common;
 using OpenTK.Windowing.Desktop;
@@ -190,6 +191,7 @@ namespace waninput2
             //listens for frames sent from server
             udp.Connect(endp);
             System.Diagnostics.Debug.WriteLine("Bound to " + endp.ToString());
+            byte[][] frameBuffer = Array.Empty<byte[]>();
 
             while (!unloaded)
             {
@@ -197,7 +199,36 @@ namespace waninput2
                 {
                     byte[] dgram = udp.Receive(ref endp);
                     System.Diagnostics.Debug.WriteLine("Received " + dgram.Length.ToString() + " bytes from " + endp.ToString());
-                    frame = Protocol.Decode(dgram[1..]);
+                    if (dgram[0] == Protocol.FRAME)
+                    {
+                        if (dgram[1] == Protocol.COMPLETE)
+                            frame = Protocol.Decode(dgram[2..]);
+                        else
+                        {
+                            if (frameBuffer.Length != dgram[2])
+                            {
+                                frameBuffer = new byte[dgram[2]][];
+                                System.Diagnostics.Debug.WriteLine("New frame buffer created");
+                            }
+                            frameBuffer[dgram[1]] = dgram[3..];
+
+                            bool full = true;
+                            foreach (byte[] b in frameBuffer)
+                                if (b == null)
+                                    full = false;
+
+                            //reconstruct frame from buffer
+                            if (full)
+                            {
+                                List<byte> frameConstruct = new List<byte>(frameBuffer[0]);
+                                for (int i = 1; i < frameBuffer.Length; i++)
+                                    frameConstruct.AddRange(frameBuffer[i]);
+
+                                frameBuffer = Array.Empty<byte[]>();
+                                frame = Protocol.Decode(frameConstruct.ToArray());
+                            }
+                        }
+                    }
                 }
                 catch (Exception)
                 {
