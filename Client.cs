@@ -305,7 +305,15 @@ namespace waninput2
                     hats = newHats;
                 }
 
-                if (!buts.Equals(newButs))
+                bool flag = false;
+                for (int i = 0; i < 10; i++)
+                    if (!buts[i].Equals(newButs[i]))
+                    {
+                        flag = true;
+                        break;
+                    }
+
+                if (flag)
                 {
                     List<byte> data = new List<byte>();
 
