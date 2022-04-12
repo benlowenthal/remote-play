@@ -91,7 +91,7 @@ namespace waninput2
 
         private static void Broadcast()
         {
-            while (true)
+            while (udp.Client != null)
             {
                 byte[] frame = Protocol.Encode(Capture());
 
@@ -121,20 +121,28 @@ namespace waninput2
 
         private static void ParseControl(VJoy vj, byte[] data)
         {
+            System.Diagnostics.Debug.WriteLine("Received " + string.Join(" ", data));
+
             if (data[0] == Protocol.AXIS)
             {
-                vj.SetAxis(BitConverter.ToInt16(data.AsSpan()[1..3]), BitConverter.ToUInt16(data.AsSpan()[3..]));
+                for (int i = 0; i < 6; i++)
+                {
+                    vj.SetAxis(i, BitConverter.ToUInt16(data.AsSpan()[((i * 2) + 1)..((i * 2) + 3)]));
+                }
             }
             else if (data[0] == Protocol.BUTTON)
             {
-                vj.SetButton(data[1], BitConverter.ToBoolean(data.AsSpan()[2..]));
+                for (int i = 1; i < 11; i++)
+                {
+                    vj.SetButton((byte)(i - 1), BitConverter.ToBoolean(new byte[] { data[i] }));
+                }
             }
             else if (data[0] == Protocol.HAT)
             {
                 vj.SetAxis(VJoy.JoystickAxis.Dial, BitConverter.ToUInt16(data.AsSpan()[1..]));
             }
 
-            vj.UpdateJoystick();
+            //vj.UpdateJoystick();
         }
     }
 }

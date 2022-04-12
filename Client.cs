@@ -206,10 +206,7 @@ namespace waninput2
                         else
                         {
                             if (frameBuffer.Length != dgram[2])
-                            {
                                 frameBuffer = new byte[dgram[2]][];
-                                System.Diagnostics.Debug.WriteLine("New frame buffer created");
-                            }
                             frameBuffer[dgram[1]] = dgram[3..];
 
                             bool full = true;
@@ -251,16 +248,79 @@ namespace waninput2
                 return;
             }
 
+            Span<float> axes = new Span<float>(new float[6]);
+            JoystickHats hats = new JoystickHats();
+            JoystickInputAction[] buts = new JoystickInputAction[10];
+
+            Span<float> newAxes;
+            JoystickHats newHats;
+            JoystickInputAction[] newButs;
+
             while (!unloaded)
             {
                 GLFW.PollEvents();
 
-                Span<float> axes = GLFW.GetJoystickAxes(jid);
-                JoystickHats hats = GLFW.GetJoystickHats(jid)[0];
-                JoystickInputAction[] buts = GLFW.GetJoystickButtons(jid);
+                newAxes = GLFW.GetJoystickAxes(jid);
+                newHats = GLFW.GetJoystickHats(jid)[0];
+                newButs = GLFW.GetJoystickButtons(jid)[..10];
 
-                //byte[] dgram = Protocol.Datagram()
-                System.Diagnostics.Debug.WriteLine(string.Join(" ", axes.ToArray()));
+                if (!axes.SequenceEqual(newAxes))
+                {
+                    List<byte> data = new List<byte>();
+                    foreach (float f in newAxes)
+                    {
+                        //convert to vJoy values
+                        short val = (short)((f * 16500) + 16500);
+                        data.AddRange(BitConverter.GetBytes(val));
+                    }
+                    System.Diagnostics.Debug.WriteLine("Sending " + string.Join(" ", newAxes.ToArray()));
+                    byte[] dgram = Protocol.Datagram(Protocol.CONTROL, Protocol.AXIS, data.ToArray());
+                    udp.Send(dgram, dgram.Length);
+    
+                    newAxes.CopyTo(axes);
+                }
+
+                if (hats != newHats)
+                {
+                    int val = -1;
+                    List<int> pressed = new List<int>();
+
+                    //vJoy continuous POV values
+                    if (newHats.HasFlag(JoystickHats.Up)) pressed.Add(0);
+                    if (newHats.HasFlag(JoystickHats.Left)) pressed.Add(8975);
+                    if (newHats.HasFlag(JoystickHats.Down)) pressed.Add(17950);
+                    if (newHats.HasFlag(JoystickHats.Right)) pressed.Add(26925);
+
+                    if (pressed.Count > 0)
+                    {
+                        foreach (int x in pressed) val += x;
+                        val = (val + 1) / pressed.Count;
+                    }
+
+                    byte[] data = BitConverter.GetBytes((short)val);
+                    System.Diagnostics.Debug.WriteLine("Sending " + string.Join(" ", data));
+                    byte[] dgram = Protocol.Datagram(Protocol.CONTROL, Protocol.HAT, data);
+                    udp.Send(dgram, dgram.Length);
+
+                    hats = newHats;
+                }
+
+                if (!buts.Equals(newButs))
+                {
+                    List<byte> data = new List<byte>();
+
+                    foreach (JoystickInputAction a in newButs)
+                    {
+                        if (a == JoystickInputAction.Press) data.Add(BitConverter.GetBytes(true)[0]);
+                        else data.Add(BitConverter.GetBytes(false)[0]);
+                    }
+
+                    System.Diagnostics.Debug.WriteLine("Sending " + string.Join(" ", data));
+                    byte[] dgram = Protocol.Datagram(Protocol.CONTROL, Protocol.BUTTON, data.ToArray());
+                    udp.Send(dgram, dgram.Length);
+
+                    Array.Copy(newButs, buts, 10);
+                }
 
                 Thread.CurrentThread.Join(1000 / 30);
             }
