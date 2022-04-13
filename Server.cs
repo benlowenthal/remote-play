@@ -6,8 +6,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.Threading;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
-using vJoyWrapper;
+using vJoy.Wrapper;
 
 namespace waninput2
 {
@@ -17,10 +16,7 @@ namespace waninput2
         private static int capHeight = 720;
 
         private static UdpClient udp;
-        private static Dictionary<IPEndPoint, VJoy> connections = new Dictionary<IPEndPoint, VJoy>(4);
-
-        [DllImport("vJoyWrapper.dll")]
-        private static extern void Update();
+        private static Dictionary<IPEndPoint, VirtualJoystick> connections = new Dictionary<IPEndPoint, VirtualJoystick>(4);
 
         public static void Main(string[] args)
         {
@@ -46,8 +42,9 @@ namespace waninput2
 
                 if (dgram[0] == Protocol.CONNECT)
                 {
-                    VJoy vj = new VJoy();
-                    System.Diagnostics.Debug.WriteLine("Acquired vJoy device for " + ep.Address.ToString());
+                    VirtualJoystick vj = new VirtualJoystick(1);
+                    vj.Aquire();
+                    System.Diagnostics.Debug.WriteLine((vj.Aquired ? "Acquired" : "Failed to acquire") + " vJoy device for " + ep.Address.ToString());
 
                     connections.Add(ep, vj);
                 }
@@ -58,14 +55,15 @@ namespace waninput2
                 }
                 else if (dgram[0] == Protocol.CONTROL)
                 {
-                    ParseControl(connections[ep], dgram[1..]);
+                    if (connections[ep].Aquired)
+                        ParseControl(connections[ep], dgram[1..]);
                 }
             }
 
             //cleanup
             udp.Close();
 
-            foreach ((_, VJoy v) in connections)
+            foreach ((_, VirtualJoystick v) in connections)
             {
                 v.Dispose();
             }
@@ -101,7 +99,7 @@ namespace waninput2
                         {
                             byte[] dgram = Protocol.Datagram(Protocol.FRAME, Protocol.COMPLETE, frame);
                             System.Diagnostics.Debug.WriteLine("Sending " + dgram.Length.ToString() + " bytes to " + endpoint.ToString());
-                            udp.Send(dgram, dgram.Length, endpoint);
+                            if (udp.Client != null) udp.Send(dgram, dgram.Length, endpoint);
                         }
                 }
                 else
@@ -111,7 +109,7 @@ namespace waninput2
                             {
                                 byte[] dgram = Protocol.Datagram(Protocol.FRAME, (byte)(i/60000), (byte)(frame.Length/60000 + 1), frame[i..Math.Min(i + 60000, frame.Length)]);
                                 System.Diagnostics.Debug.WriteLine("Sending " + dgram.Length.ToString() + " bytes to " + endpoint.ToString());
-                                udp.Send(dgram, dgram.Length, endpoint);
+                                if (udp.Client != null) udp.Send(dgram, dgram.Length, endpoint);
                             }
                 }
 
@@ -119,7 +117,7 @@ namespace waninput2
             }
         }
 
-        private static void ParseControl(VJoy vj, byte[] data)
+        private static void ParseControl(VirtualJoystick vj, byte[] data)
         {
             System.Diagnostics.Debug.WriteLine("Received " + string.Join(" ", data));
 
@@ -127,22 +125,22 @@ namespace waninput2
             {
                 for (int i = 0; i < 6; i++)
                 {
-                    vj.SetAxis(i, BitConverter.ToUInt16(data.AsSpan()[((i * 2) + 1)..((i * 2) + 3)]));
+                    vj.SetJoystickAxis(BitConverter.ToUInt16(data.AsSpan()[((i * 2) + 1)..((i * 2) + 3)]), Enum.Parse<Axis>(i.ToString()));
                 }
             }
             else if (data[0] == Protocol.BUTTON)
             {
                 for (int i = 1; i < 11; i++)
                 {
-                    vj.SetButton((byte)(i - 1), BitConverter.ToBoolean(new byte[] { data[i] }));
+                    vj.SetJoystickButton(BitConverter.ToBoolean(new byte[] { data[i] }), (byte)(i - 1));
                 }
             }
             else if (data[0] == Protocol.HAT)
             {
-                vj.SetAxis(VJoy.JoystickAxis.Dial, BitConverter.ToUInt16(data.AsSpan()[1..]));
+                vj.SetJoystickHat(BitConverter.ToUInt16(data.AsSpan()[1..]), Hats.Hat);
             }
 
-            //vj.UpdateJoystick();
+            vj.Update();
         }
     }
 }
