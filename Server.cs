@@ -34,6 +34,7 @@ namespace waninput2
             Thread cl = new Thread(new ThreadStart(StartLocalClient));
             cl.Start();
 
+            uint[] availableVJ = new uint[] { 1, 2, 3, 4 };
             while (true)
             {
                 IPEndPoint ep = new IPEndPoint(IPAddress.Any, port);
@@ -42,15 +43,32 @@ namespace waninput2
 
                 if (dgram[0] == Protocol.CONNECT)
                 {
-                    VirtualJoystick vj = new VirtualJoystick(1);
-                    vj.Aquire();
-                    System.Diagnostics.Debug.WriteLine((vj.Aquired ? "Acquired" : "Failed to acquire") + " vJoy device for " + ep.Address.ToString());
+                    //assign available vJoy device
+                    uint vjID = 0;
+                    foreach (uint id in availableVJ)
+                        if (id != 0)
+                        {
+                            vjID = id;
+                            break;
+                        }
 
-                    connections.Add(ep, vj);
+                    if (vjID != 0)
+                    {
+                        VirtualJoystick vj = new VirtualJoystick(vjID);
+                        vj.Aquire();
+                        System.Diagnostics.Debug.WriteLine((vj.Aquired ? "Acquired" : "Failed to acquire") + " vJoy device for " + ep.Address.ToString());
+                        availableVJ[vjID - 1] = 0;
+                        connections.Add(ep, vj);
+                    }
+                    else System.Diagnostics.Debug.WriteLine("No vJoy devices remaining for " + ep.Address.ToString());
                 }
                 else if (dgram[0] == Protocol.DISCONNECT)
                 {
+                    //clean dict and vJoy device
                     System.Diagnostics.Debug.WriteLine(ep.ToString() + " disconnected");
+                    availableVJ[connections[ep].JoystickId - 1] = connections[ep].JoystickId;
+                    connections[ep].Dispose();
+                    connections.Remove(ep);
                     break;
                 }
                 else if (dgram[0] == Protocol.CONTROL)
@@ -64,9 +82,7 @@ namespace waninput2
             udp.Close();
 
             foreach ((_, VirtualJoystick v) in connections)
-            {
                 v.Dispose();
-            }
         }
 
         private static void StartLocalClient()
