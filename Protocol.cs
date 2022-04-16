@@ -48,7 +48,7 @@ namespace waninput2
             return d.ToArray();
         }
 
-        public static byte[] Encode(Bitmap b)
+        public static byte[] Encode(ref Bitmap b)
         {
             using MemoryStream temp = new MemoryStream();
             using (DeflateStream ds = new DeflateStream(temp, CompressionMode.Compress))
@@ -71,20 +71,21 @@ namespace waninput2
             return new Bitmap(m);
         }
 
-        public static Bitmap Rescale(Bitmap b, int width, int height)
+        public static void Rescale(ref Bitmap b, int width, int height)
         {
             Rectangle r = new Rectangle(0, 0, width, height);
-            Bitmap scaled = new Bitmap(width, height, PixelFormat.Format24bppRgb);
-
+            using Bitmap scaled = new Bitmap(width, height, PixelFormat.Format24bppRgb);
             using (Graphics g = Graphics.FromImage(scaled))
             {
+                g.Clip = new Region(r);
                 g.CompositingQuality = CompositingQuality.HighSpeed;
                 g.InterpolationMode = InterpolationMode.Bilinear;
                 g.SmoothingMode = SmoothingMode.AntiAlias;
                 g.DrawImage(b, r, 0, 0, b.Width, b.Height, GraphicsUnit.Pixel);
             }
 
-            return scaled;
+            b = scaled.Clone(r, PixelFormat.Format24bppRgb);
+            //b = new Bitmap(scaled);
         }
     }
 }

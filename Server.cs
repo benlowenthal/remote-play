@@ -6,7 +6,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.Threading;
 using System.Collections.Generic;
-using vJoy.Wrapper;
+using CoreDX.vJoy.Wrapper;
 
 namespace waninput2
 {
@@ -16,7 +16,7 @@ namespace waninput2
         private static int capHeight = 720;
 
         private static UdpClient udp;
-        private static Dictionary<IPEndPoint, VirtualJoystick> connections = new Dictionary<IPEndPoint, VirtualJoystick>(4);
+        private static Dictionary<IPEndPoint, uint> connections = new Dictionary<IPEndPoint, uint>(4);
 
         public static void Main(string[] args)
         {
@@ -35,6 +35,7 @@ namespace waninput2
             cl.Start();
 
             uint[] availableVJ = new uint[] { 1, 2, 3, 4 };
+            VJoyControllerManager vjManager = VJoyControllerManager.GetManager();
             while (true)
             {
                 IPEndPoint ep = new IPEndPoint(IPAddress.Any, port);
@@ -54,11 +55,10 @@ namespace waninput2
 
                     if (vjID != 0)
                     {
-                        VirtualJoystick vj = new VirtualJoystick(vjID);
-                        vj.Aquire();
-                        System.Diagnostics.Debug.WriteLine((vj.Aquired ? "Acquired" : "Failed to acquire") + " vJoy device for " + ep.Address.ToString());
+                        //IVJoyController vj = vjManager.AcquireController(vjID);
+                        System.Diagnostics.Debug.WriteLine((vjManager.IsVJoyEnabled ? "Acquired" : "Failed to acquire") + " vJoy device for " + ep.Address.ToString());
                         availableVJ[vjID - 1] = 0;
-                        connections.Add(ep, vj);
+                        connections.Add(ep, vjID);
                     }
                     else System.Diagnostics.Debug.WriteLine("No vJoy devices remaining for " + ep.Address.ToString());
                 }
@@ -66,23 +66,19 @@ namespace waninput2
                 {
                     //clean dict and vJoy device
                     System.Diagnostics.Debug.WriteLine(ep.ToString() + " disconnected");
-                    availableVJ[connections[ep].JoystickId - 1] = connections[ep].JoystickId;
-                    connections[ep].Dispose();
+                    availableVJ[connections[ep] - 1] = connections[ep];
                     connections.Remove(ep);
                     break;
                 }
                 else if (dgram[0] == Protocol.CONTROL)
                 {
-                    if (connections[ep].Aquired)
-                        ParseControl(connections[ep], dgram[1..]);
+                    ParseControl(vjManager, connections[ep], dgram[1..]);
                 }
             }
 
             //cleanup
             udp.Close();
-
-            foreach ((_, VirtualJoystick v) in connections)
-                v.Dispose();
+            vjManager.Dispose();
         }
 
         private static void StartLocalClient()
@@ -90,24 +86,25 @@ namespace waninput2
             Client.Main(new string[] { "127.0.0.1", "4242" });
         }
 
-        private static Bitmap Capture()
+        private static void Capture(out Bitmap capture)
         {
             Rectangle r = Screen.GetBounds(Point.Empty);
-            Bitmap capture = new Bitmap(r.Width, r.Height, PixelFormat.Format24bppRgb);
+            capture = new Bitmap(r.Width, r.Height, PixelFormat.Format24bppRgb);
 
             using (Graphics g = Graphics.FromImage(capture))
             {
                 g.CopyFromScreen(Point.Empty, Point.Empty, r.Size);
             }
 
-            return Protocol.Rescale(capture, capWidth, capHeight);
+            Protocol.Rescale(ref capture, capWidth, capHeight);
         }
 
         private static void Broadcast()
         {
             while (udp.Client != null)
             {
-                byte[] frame = Protocol.Encode(Capture());
+                Capture(out Bitmap f);
+                byte[] frame = Protocol.Encode(ref f);
 
                 if (frame.Length < 60000)
                 {
@@ -133,30 +130,35 @@ namespace waninput2
             }
         }
 
-        private static void ParseControl(VirtualJoystick vj, byte[] data)
+        private static void ParseControl(VJoyControllerManager manager, uint id, byte[] data)
         {
+            IVJoyController vj = manager.AcquireController(id);
             System.Diagnostics.Debug.WriteLine("Received " + string.Join(" ", data));
 
             if (data[0] == Protocol.AXIS)
             {
-                for (int i = 0; i < 6; i++)
-                {
-                    vj.SetJoystickAxis(BitConverter.ToUInt16(data.AsSpan()[((i * 2) + 1)..((i * 2) + 3)]), Enum.Parse<Axis>(i.ToString()));
-                }
+                vj.SetAxisX(BitConverter.ToUInt16(data.AsSpan()[1..3]));
+                vj.SetAxisY(BitConverter.ToUInt16(data.AsSpan()[3..5]));
+                vj.SetAxisZ(BitConverter.ToUInt16(data.AsSpan()[5..7]));
+                vj.SetAxisRx(BitConverter.ToUInt16(data.AsSpan()[7..9]));
+                vj.SetAxisRy(BitConverter.ToUInt16(data.AsSpan()[9..11]));
+                vj.SetAxisRz(BitConverter.ToUInt16(data.AsSpan()[11..]));
             }
             else if (data[0] == Protocol.BUTTON)
             {
                 for (int i = 1; i < 11; i++)
                 {
-                    vj.SetJoystickButton(BitConverter.ToBoolean(new byte[] { data[i] }), (byte)(i - 1));
+                    if (BitConverter.ToBoolean(new byte[] { data[i] })) vj.PressButton((byte)i);
+                    else vj.ReleaseButton((byte)i);
                 }
             }
             else if (data[0] == Protocol.HAT)
             {
-                vj.SetJoystickHat(BitConverter.ToUInt16(data.AsSpan()[1..]), Hats.Hat);
+                System.Diagnostics.Debug.WriteLine(vj.AxisMaxValue);
+                vj.SetContPov(BitConverter.ToUInt16(data.AsSpan()[1..]), 1);
             }
 
-            vj.Update();
+            manager.RelinquishController(vj);
         }
     }
 }

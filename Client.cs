@@ -79,25 +79,23 @@ namespace waninput2
             Unload += delegate () { unloaded = true; };
         }
 
-        private void DrawImage(Bitmap image)
+        private void DrawFrame()
         {
             int width = Size.X;
             int height = Size.Y;
 
-            image = Protocol.Rescale(image, width, height);
+            Protocol.Rescale(ref frame, width, height);
 
+            using Bitmap image = new Bitmap(frame);
             BitmapData bmp = image.LockBits(new Rectangle(0, 0, image.Width, image.Height), ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
             GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgb8, width, height, 0, OpenTK.Graphics.OpenGL4.PixelFormat.Bgr, PixelType.UnsignedByte, bmp.Scan0);
             image.UnlockBits(bmp);
-            image.Dispose();
-
-            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Nearest);
-            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Linear);
         }
 
         protected override void OnLoad()
         {
             shader = new Shader();
+            shader.Use();
             GLFW.Init();
 
             //setup vertex array object
@@ -124,6 +122,8 @@ namespace waninput2
             //create texture to write bitmap to
             GL.GenTextures(1, out texture);
             GL.BindTexture(TextureTarget.Texture2D, texture);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Nearest);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Linear);
 
             base.OnLoad();
         }
@@ -152,12 +152,11 @@ namespace waninput2
         protected override void OnRenderFrame(FrameEventArgs e)
         {
             GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
-            shader.Use();
 
             GL.BindVertexArray(vao);
             GL.DrawElements(PrimitiveType.Triangles, indices.Length, DrawElementsType.UnsignedInt, 0);
 
-            DrawImage(frame);
+            DrawFrame();
 
             //openGL required
             Context.SwapBuffers();
@@ -275,7 +274,7 @@ namespace waninput2
                     }
                     System.Diagnostics.Debug.WriteLine("Sending " + string.Join(" ", newAxes.ToArray()));
                     byte[] dgram = Protocol.Datagram(Protocol.CONTROL, Protocol.AXIS, data.ToArray());
-                    udp.Send(dgram, dgram.Length);
+                    if (udp.Client != null) udp.Send(dgram, dgram.Length);
     
                     newAxes.CopyTo(axes);
                 }
@@ -283,19 +282,18 @@ namespace waninput2
                 if (hats != newHats)
                 {
                     int val = -1;
-                    List<int> pressed = new List<int>();
+                    int segment = 35900 / 8;
 
                     //vJoy continuous POV values
-                    if (newHats.HasFlag(JoystickHats.Up)) pressed.Add(0);
-                    if (newHats.HasFlag(JoystickHats.Left)) pressed.Add(8975);
-                    if (newHats.HasFlag(JoystickHats.Down)) pressed.Add(17950);
-                    if (newHats.HasFlag(JoystickHats.Right)) pressed.Add(26925);
+                    if (newHats.HasFlag(JoystickHats.RightUp)) val = segment * 1;
+                    else if (newHats.HasFlag(JoystickHats.RightDown)) val = segment * 3;
+                    else if (newHats.HasFlag(JoystickHats.LeftDown)) val = segment * 5;
+                    else if (newHats.HasFlag(JoystickHats.LeftUp)) val = segment * 7;
+                    else if (newHats.HasFlag(JoystickHats.Up)) val = 0;
+                    else if (newHats.HasFlag(JoystickHats.Right)) val = segment * 2;
+                    else if (newHats.HasFlag(JoystickHats.Down)) val = segment * 4;
+                    else if (newHats.HasFlag(JoystickHats.Left)) val = segment * 6;
 
-                    if (pressed.Count > 0)
-                    {
-                        foreach (int x in pressed) val += x;
-                        val = (val + 1) / pressed.Count;
-                    }
 
                     byte[] data = BitConverter.GetBytes((short)val);
                     System.Diagnostics.Debug.WriteLine("Sending " + string.Join(" ", data));
