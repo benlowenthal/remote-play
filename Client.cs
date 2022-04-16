@@ -57,7 +57,7 @@ namespace waninput2
             new NativeWindowSettings()
             {
                 Size = new OpenTK.Mathematics.Vector2i(w, h),
-                Title = "Remote Play Client - " + ep.ToString()
+                Title = title + " - " + ep.ToString()
             })
         {
             //setup sockets
@@ -279,7 +279,7 @@ namespace waninput2
                     newAxes.CopyTo(axes);
                 }
 
-                if (hats != newHats)
+                if (!hats.Equals(newHats))
                 {
                     int val = -1;
                     int segment = 35900 / 8;
