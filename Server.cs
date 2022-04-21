@@ -31,8 +31,8 @@ namespace waninput2
             Thread t = new Thread(new ThreadStart(Broadcast));
             t.Start();
 
-            Thread cl = new Thread(new ThreadStart(StartLocalClient));
-            cl.Start();
+            //Thread cl = new Thread(new ThreadStart(StartLocalClient));
+            //cl.Start();
 
             uint[] availableVJ = new uint[] { 1, 2, 3, 4 };
             VJoyControllerManager vjManager = VJoyControllerManager.GetManager();
