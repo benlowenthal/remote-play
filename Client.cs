@@ -14,10 +14,10 @@ namespace waninput2
 {
     class Client
     {
-        public static void Main(string[] args)
+        public static void Main(string[] _)
         {
-            using ClientWindow c = new ClientWindow(1280, 720, "Remote Play Client", 60f, new IPEndPoint(IPAddress.Parse(args[0]), int.Parse(args[1])));
-            c.Run();
+            ClientForm c = new ClientForm();
+            c.ShowDialog();
         }
     }
 
@@ -61,7 +61,14 @@ namespace waninput2
             })
         {
             //setup sockets
-            udp = new UdpClient();
+            try
+            {
+                udp = new UdpClient();
+            }
+            catch (SocketException)
+            {
+                Console.WriteLine("UDP failed to initialise. Try another port.");
+            }
             endp = ep;
 
             byte[] dgram = Protocol.Datagram(Protocol.CONNECT, Array.Empty<byte>());
