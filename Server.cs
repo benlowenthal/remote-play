@@ -15,17 +15,34 @@ namespace waninput2
         private static int capWidth = 1280;
         private static int capHeight = 720;
 
+        private static bool open = true;
+
         private static UdpClient udp;
         private static Dictionary<IPEndPoint, uint> connections = new Dictionary<IPEndPoint, uint>(4);
+        private static VJoyControllerManager vjManager;
 
-        public static void Main(string[] args)
+        public static void Main(string[] _)
         {
-            int port = int.Parse(args[0]);
-            IPEndPoint ip = new IPEndPoint(IPAddress.Any, port);
-            udp = new UdpClient(ip);
+            ServerForm f = new ServerForm();
+            f.ShowDialog();
+        }
 
-            capWidth = int.Parse(args[1]);
-            capHeight = int.Parse(args[2]);
+        public static void Run(int port, int w, int h)
+        {
+            IPEndPoint ip = new IPEndPoint(IPAddress.Any, port);
+            try
+            {
+                udp = new UdpClient(ip);
+            }
+            catch (SocketException)
+            {
+                Console.WriteLine("UDP failed to initialise. Try another port.");
+                Console.ReadKey(true);
+                Environment.Exit(0);
+            }
+
+            capWidth = w;
+            capHeight = h;
 
             //spawn threads
             Thread t = new Thread(new ThreadStart(Broadcast));
@@ -35,11 +52,19 @@ namespace waninput2
             //cl.Start();
 
             uint[] availableVJ = new uint[] { 1, 2, 3, 4 };
-            VJoyControllerManager vjManager = VJoyControllerManager.GetManager();
-            while (true)
+            vjManager = VJoyControllerManager.GetManager();
+            while (open)
             {
                 IPEndPoint ep = new IPEndPoint(IPAddress.Any, port);
-                byte[] dgram = udp.Receive(ref ep);
+                byte[] dgram = new byte[4];
+                try
+                {
+                    dgram = udp.Receive(ref ep);
+                }
+                catch (SocketException)
+                {
+                    System.Diagnostics.Debug.WriteLine("The server was closed");
+                }
                 System.Diagnostics.Debug.WriteLine("Datagram received from " + ep.ToString());
 
                 if (dgram[0] == Protocol.CONNECT)
@@ -75,9 +100,12 @@ namespace waninput2
                     ParseControl(vjManager, connections[ep], dgram[1..]);
                 }
             }
+        }
 
+        public static void Close() {
             //cleanup
-            udp.Close();
+            open = false;
+            udp.Dispose();
             vjManager.Dispose();
         }
 
