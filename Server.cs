@@ -33,6 +33,7 @@ namespace waninput2
             IPEndPoint ip = new IPEndPoint(IPAddress.Any, port);
             udp = new UdpClient(ip);
 
+            open = true;
             capWidth = w;
             capHeight = h;
 
@@ -115,7 +116,7 @@ namespace waninput2
 
         private static void Broadcast()
         {
-            while (udp.Client != null && open)
+            while (open)
             {
                 Capture(out Bitmap f);
                 byte[] frame = Protocol.Encode(ref f);
@@ -126,7 +127,8 @@ namespace waninput2
                         {
                             byte[] dgram = Protocol.Datagram(Protocol.FRAME, Protocol.COMPLETE, frame);
                             System.Diagnostics.Debug.WriteLine("Sending " + dgram.Length.ToString() + " bytes to " + endpoint.ToString());
-                            if (udp.Client != null) udp.Send(dgram, dgram.Length, endpoint);
+                            try { udp.Send(dgram, dgram.Length, endpoint); }
+                            catch (SocketException) { }
                         }
                 }
                 else
@@ -136,7 +138,8 @@ namespace waninput2
                             {
                                 byte[] dgram = Protocol.Datagram(Protocol.FRAME, (byte)(i/60000), (byte)(frame.Length/60000 + 1), frame[i..Math.Min(i + 60000, frame.Length)]);
                                 System.Diagnostics.Debug.WriteLine("Sending " + dgram.Length.ToString() + " bytes to " + endpoint.ToString());
-                                if (udp.Client != null) udp.Send(dgram, dgram.Length, endpoint);
+                                try { udp.Send(dgram, dgram.Length, endpoint); }
+                                catch (SocketException) { }
                             }
                 }
 
