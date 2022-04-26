@@ -35,6 +35,8 @@ namespace waninput2
             this.portText = new System.Windows.Forms.TextBox();
             this.accept = new System.Windows.Forms.Button();
             this.warningText = new System.Windows.Forms.Label();
+            this.panel1 = new System.Windows.Forms.Panel();
+            this.panel1.SuspendLayout();
             this.SuspendLayout();
             // 
             // ipText
@@ -81,21 +83,31 @@ namespace waninput2
             // 
             // warningText
             // 
-            this.warningText.AutoSize = true;
+            this.warningText.Dock = System.Windows.Forms.DockStyle.Fill;
             this.warningText.ForeColor = System.Drawing.Color.Red;
-            this.warningText.Location = new System.Drawing.Point(154, 156);
+            this.warningText.Location = new System.Drawing.Point(0, 0);
             this.warningText.Name = "warningText";
-            this.warningText.Size = new System.Drawing.Size(117, 15);
+            this.warningText.Size = new System.Drawing.Size(426, 30);
             this.warningText.TabIndex = 6;
-            this.warningText.Text = "Invalid configuration";
+            this.warningText.Text = "Warning";
+            this.warningText.TextAlign = System.Drawing.ContentAlignment.TopCenter;
+            this.warningText.Click += new System.EventHandler(this.warningText_Click);
+            // 
+            // panel1
+            // 
+            this.panel1.Controls.Add(this.warningText);
+            this.panel1.Location = new System.Drawing.Point(12, 167);
+            this.panel1.Name = "panel1";
+            this.panel1.Size = new System.Drawing.Size(426, 30);
+            this.panel1.TabIndex = 7;
             // 
             // ClientForm
             // 
             this.AcceptButton = this.accept;
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(450, 201);
-            this.Controls.Add(this.warningText);
+            this.ClientSize = new System.Drawing.Size(450, 209);
+            this.Controls.Add(this.panel1);
             this.Controls.Add(this.accept);
             this.Controls.Add(this.portLabel);
             this.Controls.Add(this.portText);
@@ -104,6 +116,7 @@ namespace waninput2
             this.Name = "ClientForm";
             this.Text = "Remote Play Client Setup";
             this.Load += new System.EventHandler(this.ClientForm_Load);
+            this.panel1.ResumeLayout(false);
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -117,5 +130,6 @@ namespace waninput2
         private System.Windows.Forms.TextBox portText;
         private System.Windows.Forms.Button accept;
         private System.Windows.Forms.Label warningText;
+        private System.Windows.Forms.Panel panel1;
     }
 }

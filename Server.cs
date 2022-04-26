@@ -1,4 +1,5 @@
-﻿using System;
+﻿#pragma warning disable IDE0090
+using System;
 using System.Net;
 using System.Net.Sockets;
 using System.Windows.Forms;
@@ -30,16 +31,7 @@ namespace waninput2
         public static void Run(int port, int w, int h)
         {
             IPEndPoint ip = new IPEndPoint(IPAddress.Any, port);
-            try
-            {
-                udp = new UdpClient(ip);
-            }
-            catch (SocketException)
-            {
-                Console.WriteLine("UDP failed to initialise. Try another port.");
-                Console.ReadKey(true);
-                Environment.Exit(0);
-            }
+            udp = new UdpClient(ip);
 
             capWidth = w;
             capHeight = h;
@@ -57,14 +49,9 @@ namespace waninput2
             {
                 IPEndPoint ep = new IPEndPoint(IPAddress.Any, port);
                 byte[] dgram = new byte[4];
-                try
-                {
-                    dgram = udp.Receive(ref ep);
-                }
-                catch (SocketException)
-                {
-                    System.Diagnostics.Debug.WriteLine("The server was closed");
-                }
+
+                try { dgram = udp.Receive(ref ep); }
+                catch (SocketException) { }
                 System.Diagnostics.Debug.WriteLine("Datagram received from " + ep.ToString());
 
                 if (dgram[0] == Protocol.CONNECT)
@@ -80,7 +67,6 @@ namespace waninput2
 
                     if (vjID != 0)
                     {
-                        //IVJoyController vj = vjManager.AcquireController(vjID);
                         System.Diagnostics.Debug.WriteLine((vjManager.IsVJoyEnabled ? "Acquired" : "Failed to acquire") + " vJoy device for " + ep.Address.ToString());
                         availableVJ[vjID - 1] = 0;
                         connections.Add(ep, vjID);
@@ -129,7 +115,7 @@ namespace waninput2
 
         private static void Broadcast()
         {
-            while (udp.Client != null)
+            while (udp.Client != null && open)
             {
                 Capture(out Bitmap f);
                 byte[] frame = Protocol.Encode(ref f);

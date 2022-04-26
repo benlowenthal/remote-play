@@ -6,6 +6,8 @@ namespace waninput2
 {
     public partial class ServerForm : Form
     {
+        private Exception error;
+
         public ServerForm()
         {
             InitializeComponent();
@@ -30,11 +32,16 @@ namespace waninput2
                 closeButton.Enabled = true;
                 openButton.Enabled = false;
 
-                Thread th = new Thread(new ThreadStart(delegate () { Server.Run(int.Parse(portText.Text), int.Parse(widthText.Text), int.Parse(heightText.Text)); }));
+                //start thread so form can still be interacted with
+                Thread th = new Thread(new ThreadStart(delegate () {
+                    Server.Run(int.Parse(portText.Text), int.Parse(widthText.Text), int.Parse(heightText.Text));
+                }));
                 th.Start();
             }
-            catch (FormatException)
+            catch (Exception er)
             {
+                error = er;
+                warningText.Text = er.Message + " (click for details)";
                 warningText.Show();
             }
         }
@@ -45,6 +52,12 @@ namespace waninput2
             warningText.Hide();
             openButton.Enabled = true;
             closeButton.Enabled = false;
+        }
+
+        private void warningText_Click(object sender, EventArgs e)
+        {
+            WarningDialog wd = new WarningDialog(error);
+            wd.ShowDialog();
         }
     }
 }

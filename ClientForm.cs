@@ -1,11 +1,14 @@
 ﻿using System;
 using System.Net;
+using System.Net.Sockets;
 using System.Windows.Forms;
 
 namespace waninput2
 {
     public partial class ClientForm : Form
     {
+        private Exception error;
+
         public ClientForm()
         {
             InitializeComponent();
@@ -24,13 +27,23 @@ namespace waninput2
                 int.Parse(portText.Text);
 
                 Hide();
-                using ClientWindow c = new ClientWindow(1280, 720, "Remote Play Client", 60f, new IPEndPoint(IPAddress.Parse(ipText.Text), int.Parse(portText.Text)));
+                ClientWindow c = new ClientWindow(1280, 720, "Remote Play Client", 60f, new IPEndPoint(IPAddress.Parse(ipText.Text), int.Parse(portText.Text)));
                 c.Run();
+                c.Dispose();
             }
-            catch (FormatException)
+            catch (Exception er)
             {
+                Show();
+                error = er;
+                warningText.Text = er.Message + " (click for details)";
                 warningText.Show();
             }
+        }
+
+        private void warningText_Click(object sender, EventArgs e)
+        {
+            WarningDialog wd = new WarningDialog(error);
+            wd.ShowDialog();
         }
     }
 }

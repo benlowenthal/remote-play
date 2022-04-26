@@ -1,4 +1,5 @@
-﻿using System;
+﻿#pragma warning disable IDE0090
+using System;
 using System.Net;
 using System.Net.Sockets;
 using System.Drawing;
@@ -24,6 +25,7 @@ namespace waninput2
     class ClientWindow : GameWindow
     {
         private int texture;
+        private (int w, int h) dims = (16, 9);
 
         private readonly float[] vertices = {
              1f,  1f, 0f, 1f, 0f,     // top right
@@ -61,17 +63,12 @@ namespace waninput2
             })
         {
             //setup sockets
-            try
-            {
-                udp = new UdpClient();
-            }
-            catch (SocketException)
-            {
-                Console.WriteLine("UDP failed to initialise. Try another port.");
-            }
+            udp = new UdpClient();
             endp = ep;
 
             byte[] dgram = Protocol.Datagram(Protocol.CONNECT, Array.Empty<byte>());
+
+            //notify server of client and verify endpoint
             udp.Send(dgram, dgram.Length, ep);
             System.Diagnostics.Debug.WriteLine("Sent {0} to {1}", Protocol.CONNECT.ToString(), ep.ToString());
 
@@ -151,7 +148,7 @@ namespace waninput2
             byte[] dg = Protocol.Datagram(Protocol.DISCONNECT, Array.Empty<byte>());
             udp.Send(dg, dg.Length);
             System.Diagnostics.Debug.WriteLine("Sent disconnect token");
-            udp.Close();
+            udp.Dispose();
 
             base.OnUnload();
         }
@@ -179,14 +176,14 @@ namespace waninput2
 
         protected override void OnResize(ResizeEventArgs e)
         {
-            if (e.Height * 16 < e.Width * 9)
+            if (e.Height * dims.w < e.Width * dims.h)
             {
-                int viewWidth = e.Height * 16 / 9;
+                int viewWidth = e.Height * dims.w / dims.h;
                 GL.Viewport((e.Width - viewWidth) / 2, 0, viewWidth, e.Height);
             }
             else
             {
-                int viewHeight = e.Width * 9 / 16;
+                int viewHeight = e.Width * dims.h / dims.w;
                 GL.Viewport(0, (e.Height - viewHeight) / 2, e.Width, viewHeight);
             }
             base.OnResize(e);

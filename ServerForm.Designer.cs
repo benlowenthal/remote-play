@@ -38,6 +38,8 @@ namespace waninput2
             this.heightText = new System.Windows.Forms.TextBox();
             this.x = new System.Windows.Forms.Label();
             this.closeButton = new System.Windows.Forms.Button();
+            this.panel1 = new System.Windows.Forms.Panel();
+            this.panel1.SuspendLayout();
             this.SuspendLayout();
             // 
             // widthText
@@ -84,13 +86,15 @@ namespace waninput2
             // 
             // warningText
             // 
-            this.warningText.AutoSize = true;
+            this.warningText.Dock = System.Windows.Forms.DockStyle.Fill;
             this.warningText.ForeColor = System.Drawing.Color.Red;
-            this.warningText.Location = new System.Drawing.Point(154, 156);
+            this.warningText.Location = new System.Drawing.Point(0, 0);
             this.warningText.Name = "warningText";
-            this.warningText.Size = new System.Drawing.Size(117, 15);
+            this.warningText.Size = new System.Drawing.Size(426, 30);
             this.warningText.TabIndex = 6;
-            this.warningText.Text = "Invalid configuration";
+            this.warningText.Text = "Warning";
+            this.warningText.TextAlign = System.Drawing.ContentAlignment.TopCenter;
+            this.warningText.Click += new System.EventHandler(this.warningText_Click);
             // 
             // heightText
             // 
@@ -118,15 +122,23 @@ namespace waninput2
             this.closeButton.UseVisualStyleBackColor = true;
             this.closeButton.Click += new System.EventHandler(this.closeButton_Click);
             // 
+            // panel1
+            // 
+            this.panel1.Controls.Add(this.warningText);
+            this.panel1.Location = new System.Drawing.Point(12, 168);
+            this.panel1.Name = "panel1";
+            this.panel1.Size = new System.Drawing.Size(426, 30);
+            this.panel1.TabIndex = 10;
+            // 
             // ServerForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(450, 201);
+            this.ClientSize = new System.Drawing.Size(450, 210);
+            this.Controls.Add(this.panel1);
             this.Controls.Add(this.closeButton);
             this.Controls.Add(this.x);
             this.Controls.Add(this.heightText);
-            this.Controls.Add(this.warningText);
             this.Controls.Add(this.openButton);
             this.Controls.Add(this.portLabel);
             this.Controls.Add(this.portText);
@@ -135,6 +147,7 @@ namespace waninput2
             this.Name = "ServerForm";
             this.Text = "Remote Play Server Setup";
             this.Load += new System.EventHandler(this.ServerForm_Load);
+            this.panel1.ResumeLayout(false);
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -151,5 +164,6 @@ namespace waninput2
         private System.Windows.Forms.TextBox heightText;
         private System.Windows.Forms.Label x;
         private System.Windows.Forms.Button closeButton;
+        private System.Windows.Forms.Panel panel1;
     }
 }
