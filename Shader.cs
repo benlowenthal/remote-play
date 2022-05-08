@@ -18,14 +18,16 @@ namespace waninput2
         {
             string vertexShaderSource;
 
-            using (StreamReader reader = new StreamReader(Directory.GetParent(Environment.CurrentDirectory).Parent.Parent.FullName + Path.DirectorySeparatorChar + "shader.vert", Encoding.UTF8))
+            //using (StreamReader reader = new StreamReader(Directory.GetParent(Environment.CurrentDirectory).Parent.Parent.FullName + Path.DirectorySeparatorChar + "shader.vert", Encoding.UTF8))
+            using (StreamReader reader = new StreamReader(Environment.CurrentDirectory + Path.DirectorySeparatorChar + "shader.vert", Encoding.UTF8))
             {
                 vertexShaderSource = reader.ReadToEnd();
             }
 
             string fragmentShaderSource;
 
-            using (StreamReader reader = new StreamReader(Directory.GetParent(Environment.CurrentDirectory).Parent.Parent.FullName + Path.DirectorySeparatorChar + "shader.frag", Encoding.UTF8))
+            //using (StreamReader reader = new StreamReader(Directory.GetParent(Environment.CurrentDirectory).Parent.Parent.FullName + Path.DirectorySeparatorChar + "shader.frag", Encoding.UTF8))
+            using (StreamReader reader = new StreamReader(Environment.CurrentDirectory + Path.DirectorySeparatorChar + "shader.frag", Encoding.UTF8))
             {
                 fragmentShaderSource = reader.ReadToEnd();
             }

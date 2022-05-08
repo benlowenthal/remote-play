@@ -19,8 +19,10 @@ namespace waninput2
         private static bool open = true;
 
         private static UdpClient udp;
-        private static Dictionary<IPEndPoint, uint> connections = new Dictionary<IPEndPoint, uint>(4);
+        private static Dictionary<IPEndPoint, uint> connections = new Dictionary<IPEndPoint, uint>();
         private static VJoyControllerManager vjManager;
+
+        private static uint[] availableVJ = new uint[] { 1, 2, 3, 4 };
 
         public static void Main(string[] _)
         {
@@ -41,15 +43,11 @@ namespace waninput2
             Thread t = new Thread(new ThreadStart(Broadcast));
             t.Start();
 
-            //Thread cl = new Thread(new ThreadStart(StartLocalClient));
-            //cl.Start();
-
-            uint[] availableVJ = new uint[] { 1, 2, 3, 4 };
             vjManager = VJoyControllerManager.GetManager();
             while (open)
             {
                 IPEndPoint ep = new IPEndPoint(IPAddress.Any, port);
-                byte[] dgram = new byte[4];
+                byte[] dgram = new byte[2];
 
                 try { dgram = udp.Receive(ref ep); }
                 catch (SocketException) { }
@@ -57,22 +55,7 @@ namespace waninput2
 
                 if (dgram[0] == Protocol.CONNECT)
                 {
-                    //assign available vJoy device
-                    uint vjID = 0;
-                    foreach (uint id in availableVJ)
-                        if (id != 0)
-                        {
-                            vjID = id;
-                            break;
-                        }
-
-                    if (vjID != 0)
-                    {
-                        System.Diagnostics.Debug.WriteLine((vjManager.IsVJoyEnabled ? "Acquired" : "Failed to acquire") + " vJoy device for " + ep.Address.ToString());
-                        availableVJ[vjID - 1] = 0;
-                        connections.Add(ep, vjID);
-                    }
-                    else System.Diagnostics.Debug.WriteLine("No vJoy devices remaining for " + ep.Address.ToString());
+                    Connect(ep);
                 }
                 else if (dgram[0] == Protocol.DISCONNECT)
                 {
@@ -84,9 +67,32 @@ namespace waninput2
                 }
                 else if (dgram[0] == Protocol.CONTROL)
                 {
+                    if (!connections.ContainsKey(ep)) Connect(ep);
                     ParseControl(vjManager, connections[ep], dgram[1..]);
                 }
+
+                System.Diagnostics.Debug.WriteLine(string.Join(",", connections.Keys));
             }
+        }
+
+        private static void Connect(IPEndPoint ep)
+        {
+            //assign available vJoy device
+            uint vjID = 0;
+            foreach (uint id in availableVJ)
+                if (id != 0)
+                {
+                    vjID = id;
+                    break;
+                }
+
+            if (vjID != 0)
+            {
+                System.Diagnostics.Debug.WriteLine((vjManager.IsVJoyEnabled ? "Acquired" : "Failed to acquire") + " vJoy device for " + ep.Address.ToString());
+                connections.Add(ep, vjID);
+                availableVJ[vjID - 1] = 0;
+            }
+            else System.Diagnostics.Debug.WriteLine("No vJoy devices remaining for " + ep.Address.ToString());
         }
 
         public static void Close() {
@@ -94,11 +100,7 @@ namespace waninput2
             open = false;
             udp.Dispose();
             vjManager.Dispose();
-        }
-
-        private static void StartLocalClient()
-        {
-            Client.Main(new string[] { "127.0.0.1", "4242" });
+            connections = new Dictionary<IPEndPoint, uint>();
         }
 
         private static void Capture(out Bitmap capture)
@@ -125,6 +127,7 @@ namespace waninput2
                 {
                     foreach ((IPEndPoint endpoint, _) in connections) if (endpoint != null)
                         {
+                            if (!open) break;
                             byte[] dgram = Protocol.Datagram(Protocol.FRAME, Protocol.COMPLETE, frame);
                             System.Diagnostics.Debug.WriteLine("Sending " + dgram.Length.ToString() + " bytes to " + endpoint.ToString());
                             try { udp.Send(dgram, dgram.Length, endpoint); }
@@ -136,6 +139,7 @@ namespace waninput2
                     for (int i = 0; i < frame.Length; i += 60000)
                         foreach ((IPEndPoint endpoint, _) in connections) if (endpoint != null)
                             {
+                                if (!open) break;
                                 byte[] dgram = Protocol.Datagram(Protocol.FRAME, (byte)(i/60000), (byte)(frame.Length/60000 + 1), frame[i..Math.Min(i + 60000, frame.Length)]);
                                 System.Diagnostics.Debug.WriteLine("Sending " + dgram.Length.ToString() + " bytes to " + endpoint.ToString());
                                 try { udp.Send(dgram, dgram.Length, endpoint); }

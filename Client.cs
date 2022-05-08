@@ -19,6 +19,8 @@ namespace waninput2
         {
             ClientForm c = new ClientForm();
             c.ShowDialog();
+
+            GLFW.Terminate();
         }
     }
 
@@ -334,8 +336,6 @@ namespace waninput2
 
                 Thread.CurrentThread.Join(1000 / 30);
             }
-
-            GLFW.Terminate();
         }
     }
 }

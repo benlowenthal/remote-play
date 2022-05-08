@@ -30,13 +30,14 @@ namespace waninput2
                 ClientWindow c = new ClientWindow(1280, 720, "Remote Play Client", 60f, new IPEndPoint(IPAddress.Parse(ipText.Text), int.Parse(portText.Text)));
                 c.Run();
                 c.Dispose();
+                Show();
             }
             catch (Exception er)
             {
-                Show();
                 error = er;
                 warningText.Text = er.Message + " (click for details)";
                 warningText.Show();
+                Show();
             }
         }
 
