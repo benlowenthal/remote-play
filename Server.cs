@@ -16,12 +16,13 @@ namespace waninput2
         private static int capWidth = 1280;
         private static int capHeight = 720;
 
-        private static bool open = true;
-
         private static UdpClient udp;
         private static Dictionary<IPEndPoint, uint> connections = new Dictionary<IPEndPoint, uint>();
         private static VJoyControllerManager vjManager;
 
+        private static CancellationTokenSource broadcastToken = new CancellationTokenSource();
+
+        private static bool open = false;
         private static uint[] availableVJ = new uint[] { 1, 2, 3, 4 };
 
         public static void Main(string[] _)
@@ -40,8 +41,8 @@ namespace waninput2
             capHeight = h;
 
             //spawn threads
-            Thread t = new Thread(new ThreadStart(Broadcast));
-            t.Start();
+            Thread t = new Thread(new ParameterizedThreadStart(Broadcast));
+            t.Start(broadcastToken.Token);
 
             vjManager = VJoyControllerManager.GetManager();
             while (open)
@@ -63,7 +64,6 @@ namespace waninput2
                     System.Diagnostics.Debug.WriteLine(ep.ToString() + " disconnected");
                     availableVJ[connections[ep] - 1] = connections[ep];
                     connections.Remove(ep);
-                    break;
                 }
                 else if (dgram[0] == Protocol.CONTROL)
                 {
@@ -98,6 +98,7 @@ namespace waninput2
         public static void Close() {
             //cleanup
             open = false;
+            broadcastToken.Cancel();
             udp.Dispose();
             vjManager.Dispose();
             connections = new Dictionary<IPEndPoint, uint>();
@@ -116,9 +117,10 @@ namespace waninput2
             Protocol.Rescale(ref capture, capWidth, capHeight);
         }
 
-        private static void Broadcast()
+        private static void Broadcast(object tk)
         {
-            while (open)
+            CancellationToken token = (CancellationToken)tk;
+            while (!token.IsCancellationRequested)
             {
                 Capture(out Bitmap f);
                 byte[] frame = Protocol.Encode(ref f);

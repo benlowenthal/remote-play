@@ -85,7 +85,6 @@ namespace waninput2
             }
 
             b = scaled.Clone(r, PixelFormat.Format24bppRgb);
-            //b = new Bitmap(scaled);
         }
     }
 }

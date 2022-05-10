@@ -51,7 +51,8 @@ namespace waninput2
         private IPEndPoint endp;
         private Bitmap frame;
 
-        private bool unloaded = false;
+        private CancellationTokenSource frameToken = new CancellationTokenSource();
+        private CancellationTokenSource controlToken = new CancellationTokenSource();
 
         public ClientWindow(int w, int h, string title, float freq, IPEndPoint ep) : base(
             new GameWindowSettings() {
@@ -76,13 +77,14 @@ namespace waninput2
 
             frame = new Bitmap(w, h);
 
-            Thread frameListen = new Thread(new ThreadStart(FrameListen));
-            frameListen.Start();
+            if (GLFW.Init())
+            {
+                Thread frameListen = new Thread(new ParameterizedThreadStart(FrameListen));
+                frameListen.Start(frameToken.Token);
 
-            Thread controls = new Thread(new ThreadStart(SendControls));
-            controls.Start();
-
-            Unload += delegate () { unloaded = true; };
+                Thread controls = new Thread(new ParameterizedThreadStart(SendControls));
+                controls.Start(controlToken.Token);
+            }
         }
 
         private void DrawFrame()
@@ -102,7 +104,6 @@ namespace waninput2
         {
             shader = new Shader();
             shader.Use();
-            GLFW.Init();
 
             //setup vertex array object
             vao = GL.GenVertexArray();
@@ -143,6 +144,10 @@ namespace waninput2
 
             GL.BindBuffer(BufferTarget.ElementArrayBuffer, 0);
             GL.DeleteBuffer(elementBuffer);
+
+            //cancel threads
+            frameToken.Cancel();
+            controlToken.Cancel();
 
             shader.Dispose();
             frame.Dispose();
@@ -191,14 +196,15 @@ namespace waninput2
             base.OnResize(e);
         }
 
-        private void FrameListen()
+        private void FrameListen(object tk)
         {
             //listens for frames sent from server
             udp.Connect(endp);
             System.Diagnostics.Debug.WriteLine("Bound to " + endp.ToString());
             byte[][] frameBuffer = Array.Empty<byte[]>();
 
-            while (!unloaded)
+            CancellationToken token = (CancellationToken)tk;
+            while (!token.IsCancellationRequested)
             {
                 try
                 {
@@ -239,7 +245,7 @@ namespace waninput2
             }
         }
 
-        private void SendControls()
+        private void SendControls(object tk)
         {
             //controller setup
             int jid = -1;
@@ -261,7 +267,8 @@ namespace waninput2
             JoystickHats newHats;
             JoystickInputAction[] newButs;
 
-            while (!unloaded)
+            CancellationToken token = (CancellationToken)tk;
+            while (!token.IsCancellationRequested)
             {
                 GLFW.PollEvents();
 
