@@ -14,6 +14,7 @@ namespace waninput2
         public static byte DISCONNECT = 102;
         public static byte FRAME = 103;
         public static byte CONTROL = 104;
+        public static byte AUDIO = 105;
 
         public static byte COMPLETE = 111;
 

@@ -8,6 +8,8 @@ using System.Drawing.Imaging;
 using System.Threading;
 using System.Collections.Generic;
 using CoreDX.vJoy.Wrapper;
+using NAudio.Wave;
+using System.IO;
 
 namespace waninput2
 {
@@ -20,7 +22,7 @@ namespace waninput2
         private static Dictionary<IPEndPoint, uint> connections = new Dictionary<IPEndPoint, uint>();
         private static VJoyControllerManager vjManager;
 
-        private static CancellationTokenSource broadcastToken = new CancellationTokenSource();
+        private static CancellationTokenSource cancelToken = new CancellationTokenSource();
 
         private static bool open = false;
         private static uint[] availableVJ = new uint[] { 1, 2, 3, 4 };
@@ -42,7 +44,10 @@ namespace waninput2
 
             //spawn threads
             Thread t = new Thread(new ParameterizedThreadStart(Broadcast));
-            t.Start(broadcastToken.Token);
+            t.Start(cancelToken.Token);
+
+            Thread a = new Thread(new ParameterizedThreadStart(SendAudio));
+            a.Start(cancelToken.Token);
 
             vjManager = VJoyControllerManager.GetManager();
             while (open)
@@ -95,13 +100,14 @@ namespace waninput2
             else System.Diagnostics.Debug.WriteLine("No vJoy devices remaining for " + ep.Address.ToString());
         }
 
-        public static void Close() {
+        public static void Close()
+        {
             //cleanup
             open = false;
-            broadcastToken.Cancel();
+            cancelToken.Cancel();
+            udp.Client.Dispose();
             udp.Dispose();
             vjManager.Dispose();
-            connections = new Dictionary<IPEndPoint, uint>();
         }
 
         private static void Capture(out Bitmap capture)
@@ -127,11 +133,10 @@ namespace waninput2
 
                 if (frame.Length < 60000)
                 {
+                    byte[] dgram = Protocol.Datagram(Protocol.FRAME, Protocol.COMPLETE, frame);
                     foreach ((IPEndPoint endpoint, _) in connections) if (endpoint != null)
                         {
                             if (!open) break;
-                            byte[] dgram = Protocol.Datagram(Protocol.FRAME, Protocol.COMPLETE, frame);
-                            System.Diagnostics.Debug.WriteLine("Sending " + dgram.Length.ToString() + " bytes to " + endpoint.ToString());
                             try { udp.Send(dgram, dgram.Length, endpoint); }
                             catch (SocketException) { }
                         }
@@ -139,14 +144,15 @@ namespace waninput2
                 else
                 {
                     for (int i = 0; i < frame.Length; i += 60000)
+                    {
+                        byte[] dgram = Protocol.Datagram(Protocol.FRAME, (byte)(i / 60000), (byte)(frame.Length / 60000 + 1), frame[i..Math.Min(i + 60000, frame.Length)]);
                         foreach ((IPEndPoint endpoint, _) in connections) if (endpoint != null)
                             {
                                 if (!open) break;
-                                byte[] dgram = Protocol.Datagram(Protocol.FRAME, (byte)(i/60000), (byte)(frame.Length/60000 + 1), frame[i..Math.Min(i + 60000, frame.Length)]);
-                                System.Diagnostics.Debug.WriteLine("Sending " + dgram.Length.ToString() + " bytes to " + endpoint.ToString());
                                 try { udp.Send(dgram, dgram.Length, endpoint); }
                                 catch (SocketException) { }
                             }
+                    }
                 }
 
                 Thread.CurrentThread.Join(1000 / 30); //hertz
@@ -158,7 +164,7 @@ namespace waninput2
             IVJoyController vj = manager.AcquireController(id);
             System.Diagnostics.Debug.WriteLine("Received " + string.Join(" ", data));
 
-            if (data[0] == Protocol.AXIS)
+            if (data[0] == Protocol.AXIS && vj != null)
             {
                 vj.SetAxisX(BitConverter.ToUInt16(data.AsSpan()[1..3]));
                 vj.SetAxisY(BitConverter.ToUInt16(data.AsSpan()[3..5]));
@@ -167,7 +173,7 @@ namespace waninput2
                 vj.SetAxisRy(BitConverter.ToUInt16(data.AsSpan()[9..11]));
                 vj.SetAxisRz(BitConverter.ToUInt16(data.AsSpan()[11..]));
             }
-            else if (data[0] == Protocol.BUTTON)
+            else if (data[0] == Protocol.BUTTON && vj != null)
             {
                 for (int i = 1; i < 11; i++)
                 {
@@ -175,13 +181,48 @@ namespace waninput2
                     else vj.ReleaseButton((byte)i);
                 }
             }
-            else if (data[0] == Protocol.HAT)
+            else if (data[0] == Protocol.HAT && vj != null)
             {
                 System.Diagnostics.Debug.WriteLine(vj.AxisMaxValue);
                 vj.SetContPov(BitConverter.ToUInt16(data.AsSpan()[1..]), 1);
             }
 
-            manager.RelinquishController(vj);
+            if (vj != null) manager.RelinquishController(vj);
+        }
+
+        private static void SendAudio(object tk)
+        {
+            MemoryStream buffer = new MemoryStream();
+
+            WasapiLoopbackCapture audioCapture = new WasapiLoopbackCapture();
+            audioCapture.WaveFormat = new WaveFormat(22050, 8, 2);
+            audioCapture.StartRecording();
+            audioCapture.DataAvailable += (_, a) => { buffer.Write(a.Buffer, 0, a.BytesRecorded); };
+
+            CancellationToken token = (CancellationToken)tk;
+            while (!token.IsCancellationRequested)
+            {
+                byte[] dgram = Protocol.Datagram(Protocol.AUDIO, buffer.ToArray());
+                if (dgram.Length > 1)
+                {
+                    System.Diagnostics.Trace.WriteLine("Read " + dgram.Length + " audio bytes");
+
+                    //empty buffer after read
+                    buffer = new MemoryStream();
+
+                    foreach ((IPEndPoint endpoint, _) in connections) if (endpoint != null)
+                        {
+                            if (!open) break;
+                            try { udp.Send(dgram, dgram.Length, endpoint); }
+                            catch (SocketException) { }
+                        }
+                }
+
+                Thread.CurrentThread.Join(1000 / 30); //hertz
+            }
+
+            buffer.Dispose();
+            audioCapture.StopRecording();
         }
     }
 }
