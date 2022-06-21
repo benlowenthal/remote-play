@@ -6,10 +6,13 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.Threading;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using OpenTK.Graphics.OpenGL4;
 using OpenTK.Windowing.Common;
 using OpenTK.Windowing.Desktop;
 using OpenTK.Windowing.GraphicsLibraryFramework;
+using NAudio.Wave;
+using NAudio.CoreAudioApi;
 
 namespace waninput2
 {
@@ -51,8 +54,11 @@ namespace waninput2
         private IPEndPoint endp;
         private Bitmap frame;
 
-        private CancellationTokenSource frameToken = new CancellationTokenSource();
-        private CancellationTokenSource controlToken = new CancellationTokenSource();
+        private MMDevice device;
+        private BufferedWaveProvider bwp;
+        private WasapiOut wo;
+
+        private CancellationTokenSource cancelToken = new CancellationTokenSource();
 
         public ClientWindow(int w, int h, string title, float freq, IPEndPoint ep) : base(
             new GameWindowSettings() {
@@ -79,25 +85,12 @@ namespace waninput2
 
             if (GLFW.Init())
             {
-                Thread frameListen = new Thread(new ParameterizedThreadStart(FrameListen));
-                frameListen.Start(frameToken.Token);
+                Thread listen = new Thread(new ParameterizedThreadStart(Listen));
+                listen.Start(cancelToken.Token);
 
                 Thread controls = new Thread(new ParameterizedThreadStart(SendControls));
-                controls.Start(controlToken.Token);
+                controls.Start(cancelToken.Token);
             }
-        }
-
-        private void DrawFrame()
-        {
-            int width = Size.X;
-            int height = Size.Y;
-
-            Protocol.Rescale(ref frame, width, height);
-
-            using Bitmap image = new Bitmap(frame);
-            BitmapData bmp = image.LockBits(new Rectangle(0, 0, image.Width, image.Height), ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
-            GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgb8, width, height, 0, OpenTK.Graphics.OpenGL4.PixelFormat.Bgr, PixelType.UnsignedByte, bmp.Scan0);
-            image.UnlockBits(bmp);
         }
 
         protected override void OnLoad()
@@ -132,6 +125,17 @@ namespace waninput2
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Nearest);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Linear);
 
+            //gen audio buffers
+            MMDeviceEnumerator mm = new MMDeviceEnumerator();
+            device = mm.GetDefaultAudioEndpoint(DataFlow.Render, Role.Console);
+            mm.Dispose();
+
+            bwp = new BufferedWaveProvider(WaveFormat.CreateIeeeFloatWaveFormat(11025, 1));
+
+            wo = new WasapiOut(device, AudioClientShareMode.Shared, true, 1);
+            wo.Init(bwp);
+            wo.Play();
+
             base.OnLoad();
         }
 
@@ -146,8 +150,7 @@ namespace waninput2
             GL.DeleteBuffer(elementBuffer);
 
             //cancel threads
-            frameToken.Cancel();
-            controlToken.Cancel();
+            cancelToken.Cancel();
 
             shader.Dispose();
             frame.Dispose();
@@ -157,6 +160,11 @@ namespace waninput2
             System.Diagnostics.Debug.WriteLine("Sent disconnect token");
             udp.Dispose();
 
+            device.Dispose();
+            bwp.ClearBuffer();
+            wo.Stop();
+            wo.Dispose();
+
             base.OnUnload();
         }
 
@@ -164,10 +172,19 @@ namespace waninput2
         {
             GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
 
+            int width = Size.X;
+            int height = Size.Y;
+
             GL.BindVertexArray(vao);
             GL.DrawElements(PrimitiveType.Triangles, indices.Length, DrawElementsType.UnsignedInt, 0);
 
-            DrawFrame();
+            Protocol.Rescale(ref frame, width, height);
+
+            //draw frame
+            using Bitmap image = new Bitmap(frame);
+            BitmapData bmp = image.LockBits(new Rectangle(0, 0, image.Width, image.Height), ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+            GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgb8, width, height, 0, OpenTK.Graphics.OpenGL4.PixelFormat.Bgr, PixelType.UnsignedByte, bmp.Scan0);
+            image.UnlockBits(bmp);
 
             //openGL required
             Context.SwapBuffers();
@@ -196,51 +213,50 @@ namespace waninput2
             base.OnResize(e);
         }
 
-        private void FrameListen(object tk)
+        private void Listen(object tk)
         {
-            //listens for frames sent from server
+            //listens for coms sent from server
             udp.Connect(endp);
-            System.Diagnostics.Debug.WriteLine("Bound to " + endp.ToString());
             byte[][] frameBuffer = Array.Empty<byte[]>();
 
             CancellationToken token = (CancellationToken)tk;
             while (!token.IsCancellationRequested)
             {
-                try
+                byte[] dgram = new byte[2];
+
+                try { dgram = udp.Receive(ref endp); }
+                catch (SocketException) { }
+
+                if (dgram[0] == Protocol.FRAME)
                 {
-                    byte[] dgram = udp.Receive(ref endp);
-                    System.Diagnostics.Debug.WriteLine("Received " + dgram.Length.ToString() + " bytes from " + endp.ToString());
-                    if (dgram[0] == Protocol.FRAME)
+                    if (dgram[1] == Protocol.COMPLETE)
+                        frame = Protocol.Decode(dgram[2..]);
+                    else
                     {
-                        if (dgram[1] == Protocol.COMPLETE)
-                            frame = Protocol.Decode(dgram[2..]);
-                        else
+                        if (frameBuffer.Length != dgram[2])
+                            frameBuffer = new byte[dgram[2]][];
+                        frameBuffer[dgram[1]] = dgram[3..];
+
+                        bool full = true;
+                        foreach (byte[] b in frameBuffer)
+                            if (b == null)
+                                full = false;
+
+                        //reconstruct frame from buffer
+                        if (full)
                         {
-                            if (frameBuffer.Length != dgram[2])
-                                frameBuffer = new byte[dgram[2]][];
-                            frameBuffer[dgram[1]] = dgram[3..];
+                            List<byte> frameConstruct = new List<byte>(frameBuffer[0]);
+                            for (int i = 1; i < frameBuffer.Length; i++)
+                                frameConstruct.AddRange(frameBuffer[i]);
 
-                            bool full = true;
-                            foreach (byte[] b in frameBuffer)
-                                if (b == null)
-                                    full = false;
-
-                            //reconstruct frame from buffer
-                            if (full)
-                            {
-                                List<byte> frameConstruct = new List<byte>(frameBuffer[0]);
-                                for (int i = 1; i < frameBuffer.Length; i++)
-                                    frameConstruct.AddRange(frameBuffer[i]);
-
-                                frameBuffer = Array.Empty<byte[]>();
-                                frame = Protocol.Decode(frameConstruct.ToArray());
-                            }
+                            frameBuffer = Array.Empty<byte[]>();
+                            frame = Protocol.Decode(frameConstruct.ToArray());
                         }
                     }
                 }
-                catch (Exception)
+                else if (dgram[0] == Protocol.AUDIO)
                 {
-                    System.Diagnostics.Debug.WriteLine("Receive failed at " + DateTime.Now.ToString());
+                    bwp.AddSamples(dgram[1..], bwp.BufferedBytes, dgram.Length - 1);
                 }
             }
         }
