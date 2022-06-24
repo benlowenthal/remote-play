@@ -129,6 +129,7 @@ namespace waninput2
             MMDeviceEnumerator mm = new MMDeviceEnumerator();
             device = mm.GetDefaultAudioEndpoint(DataFlow.Render, Role.Console);
             mm.Dispose();
+            System.Diagnostics.Trace.WriteLine("Outputting to " + device.DeviceFriendlyName);
 
             bwp = new BufferedWaveProvider(WaveFormat.CreateIeeeFloatWaveFormat(11025, 1));
 
@@ -157,7 +158,6 @@ namespace waninput2
 
             byte[] dg = Protocol.Datagram(Protocol.DISCONNECT, Array.Empty<byte>());
             udp.Send(dg, dg.Length);
-            System.Diagnostics.Debug.WriteLine("Sent disconnect token");
             udp.Dispose();
 
             device.Dispose();
@@ -256,7 +256,7 @@ namespace waninput2
                 }
                 else if (dgram[0] == Protocol.AUDIO)
                 {
-                    bwp.AddSamples(dgram[1..], bwp.BufferedBytes, dgram.Length - 1);
+                    bwp.AddSamples(dgram[1..], bwp.BufferedBytes, 1);
                 }
             }
         }

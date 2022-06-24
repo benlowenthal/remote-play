@@ -34,7 +34,7 @@ namespace waninput2
 
                 //start thread so form can still be interacted with
                 Thread th = new Thread(new ThreadStart(delegate () {
-                    Server.Run(int.Parse(portText.Text), int.Parse(widthText.Text), int.Parse(heightText.Text));
+                    Server.Run(int.Parse(portText.Text), int.Parse(widthText.Text), int.Parse(heightText.Text), textLog);
                 }));
                 th.Start();
             }
@@ -56,8 +56,11 @@ namespace waninput2
 
         private void warningText_Click(object sender, EventArgs e)
         {
-            WarningDialog wd = new WarningDialog(error);
-            wd.ShowDialog();
+            if (error != null)
+            {
+                WarningDialog wd = new WarningDialog(error);
+                wd.ShowDialog();
+            }
         }
     }
 }

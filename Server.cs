@@ -27,13 +27,15 @@ namespace waninput2
         private static bool open = false;
         private static uint[] availableVJ = new uint[] { 1, 2, 3, 4 };
 
+        private static RichTextBox log;
+
         public static void Main(string[] _)
         {
             ServerForm f = new ServerForm();
             f.ShowDialog();
         }
 
-        public static void Run(int port, int w, int h)
+        public static void Run(int port, int w, int h, RichTextBox logBox)
         {
             IPEndPoint ip = new IPEndPoint(IPAddress.Any, port);
             udp = new UdpClient(ip);
@@ -41,6 +43,8 @@ namespace waninput2
             open = true;
             capWidth = w;
             capHeight = h;
+
+            log = logBox;
 
             //spawn threads
             Thread t = new Thread(new ParameterizedThreadStart(Broadcast));
@@ -57,7 +61,6 @@ namespace waninput2
 
                 try { dgram = udp.Receive(ref ep); }
                 catch (SocketException) { }
-                System.Diagnostics.Debug.WriteLine("Datagram received from " + ep.ToString());
 
                 if (dgram[0] == Protocol.CONNECT)
                 {
@@ -66,7 +69,7 @@ namespace waninput2
                 else if (dgram[0] == Protocol.DISCONNECT)
                 {
                     //clean dict and vJoy device
-                    System.Diagnostics.Debug.WriteLine(ep.ToString() + " disconnected");
+                    ServerLog(ep.ToString() + " disconnected");
                     availableVJ[connections[ep] - 1] = connections[ep];
                     connections.Remove(ep);
                 }
@@ -75,13 +78,13 @@ namespace waninput2
                     if (!connections.ContainsKey(ep)) Connect(ep);
                     ParseControl(vjManager, connections[ep], dgram[1..]);
                 }
-
-                System.Diagnostics.Debug.WriteLine(string.Join(",", connections.Keys));
             }
         }
 
         private static void Connect(IPEndPoint ep)
         {
+            ServerLog("Connected to " + ep.ToString());
+
             //assign available vJoy device
             uint vjID = 0;
             foreach (uint id in availableVJ)
@@ -93,11 +96,11 @@ namespace waninput2
 
             if (vjID != 0)
             {
-                System.Diagnostics.Debug.WriteLine((vjManager.IsVJoyEnabled ? "Acquired" : "Failed to acquire") + " vJoy device for " + ep.Address.ToString());
+                ServerLog((vjManager.IsVJoyEnabled ? "Acquired" : "Failed to acquire") + " vJoy device for " + ep.Address.ToString());
                 connections.Add(ep, vjID);
                 availableVJ[vjID - 1] = 0;
             }
-            else System.Diagnostics.Debug.WriteLine("No vJoy devices remaining for " + ep.Address.ToString());
+            else ServerLog("No vJoy devices remaining for " + ep.Address.ToString());
         }
 
         public static void Close()
@@ -105,7 +108,6 @@ namespace waninput2
             //cleanup
             open = false;
             cancelToken.Cancel();
-            udp.Client.Dispose();
             udp.Dispose();
             vjManager.Dispose();
         }
@@ -162,7 +164,6 @@ namespace waninput2
         private static void ParseControl(VJoyControllerManager manager, uint id, byte[] data)
         {
             IVJoyController vj = manager.AcquireController(id);
-            System.Diagnostics.Debug.WriteLine("Received " + string.Join(" ", data));
 
             if (data[0] == Protocol.AXIS && vj != null)
             {
@@ -182,10 +183,7 @@ namespace waninput2
                 }
             }
             else if (data[0] == Protocol.HAT && vj != null)
-            {
-                System.Diagnostics.Debug.WriteLine(vj.AxisMaxValue);
                 vj.SetContPov(BitConverter.ToUInt16(data.AsSpan()[1..]), 1);
-            }
 
             if (vj != null) manager.RelinquishController(vj);
         }
@@ -205,17 +203,15 @@ namespace waninput2
                 byte[] dgram = Protocol.Datagram(Protocol.AUDIO, buffer.ToArray());
                 if (dgram.Length > 1)
                 {
-                    System.Diagnostics.Trace.WriteLine("Read " + dgram.Length + " audio bytes");
-
-                    //empty buffer after read
-                    buffer = new MemoryStream();
-
                     foreach ((IPEndPoint endpoint, _) in connections) if (endpoint != null)
                         {
                             if (!open) break;
                             try { udp.Send(dgram, dgram.Length, endpoint); }
                             catch (SocketException) { }
                         }
+
+                    //empty buffer after read
+                    buffer = new MemoryStream();
                 }
 
                 Thread.CurrentThread.Join(1000 / 30); //hertz
@@ -223,6 +219,16 @@ namespace waninput2
 
             buffer.Dispose();
             audioCapture.StopRecording();
+        }
+
+        private static void ServerLog(string msg)
+        {
+            if (log != null)
+            {
+                if (log.Text.Length > 0)
+                    log.AppendText("\n");
+                log.AppendText(msg);
+            }
         }
     }
 }

@@ -39,6 +39,7 @@ namespace waninput2
             this.x = new System.Windows.Forms.Label();
             this.closeButton = new System.Windows.Forms.Button();
             this.panel1 = new System.Windows.Forms.Panel();
+            this.textLog = new System.Windows.Forms.RichTextBox();
             this.panel1.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -130,11 +131,20 @@ namespace waninput2
             this.panel1.Size = new System.Drawing.Size(426, 30);
             this.panel1.TabIndex = 10;
             // 
+            // textLog
+            // 
+            this.textLog.Location = new System.Drawing.Point(12, 201);
+            this.textLog.Name = "textLog";
+            this.textLog.Size = new System.Drawing.Size(434, 68);
+            this.textLog.TabIndex = 11;
+            this.textLog.Text = "";
+            // 
             // ServerForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(450, 210);
+            this.ClientSize = new System.Drawing.Size(458, 281);
+            this.Controls.Add(this.textLog);
             this.Controls.Add(this.panel1);
             this.Controls.Add(this.closeButton);
             this.Controls.Add(this.x);
@@ -165,5 +175,6 @@ namespace waninput2
         private System.Windows.Forms.Label x;
         private System.Windows.Forms.Button closeButton;
         private System.Windows.Forms.Panel panel1;
+        private System.Windows.Forms.RichTextBox textLog;
     }
 }
