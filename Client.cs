@@ -83,6 +83,18 @@ namespace waninput2
 
             frame = new Bitmap(w, h);
 
+            //gen audio buffers
+            MMDeviceEnumerator mm = new MMDeviceEnumerator();
+            device = mm.GetDefaultAudioEndpoint(DataFlow.Render, Role.Console);
+            mm.Dispose();
+            System.Diagnostics.Trace.WriteLine("Outputting to " + device.DeviceFriendlyName);
+
+            bwp = new BufferedWaveProvider(WaveFormat.CreateIeeeFloatWaveFormat(11025, 1));
+
+            wo = new WasapiOut(device, AudioClientShareMode.Shared, true, 1);
+            wo.Init(bwp);
+            wo.Play();
+
             if (GLFW.Init())
             {
                 Thread listen = new Thread(new ParameterizedThreadStart(Listen));
@@ -124,18 +136,6 @@ namespace waninput2
             GL.BindTexture(TextureTarget.Texture2D, texture);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Nearest);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Linear);
-
-            //gen audio buffers
-            MMDeviceEnumerator mm = new MMDeviceEnumerator();
-            device = mm.GetDefaultAudioEndpoint(DataFlow.Render, Role.Console);
-            mm.Dispose();
-            System.Diagnostics.Trace.WriteLine("Outputting to " + device.DeviceFriendlyName);
-
-            bwp = new BufferedWaveProvider(WaveFormat.CreateIeeeFloatWaveFormat(11025, 1));
-
-            wo = new WasapiOut(device, AudioClientShareMode.Shared, true, 1);
-            wo.Init(bwp);
-            wo.Play();
 
             base.OnLoad();
         }
@@ -256,7 +256,8 @@ namespace waninput2
                 }
                 else if (dgram[0] == Protocol.AUDIO)
                 {
-                    bwp.AddSamples(dgram[1..], bwp.BufferedBytes, 1);
+                    bwp.AddSamples(dgram, 1, dgram.Length - 1);
+                    wo.Play();
                 }
             }
         }
